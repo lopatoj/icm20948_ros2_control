@@ -4,6 +4,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "icm20948/ICM_20948_C.h"
 #include "rclcpp/rclcpp.hpp"
 
 #include "icm20948_ros2_control/icm20948_interface.hpp"
@@ -122,7 +123,7 @@ hardware_interface::CallbackReturn ICM20948Interface::on_activate(
       &icm_device_,
       (ICM_20948_InternalSensorID_bm)(ICM_20948_Internal_Acc |
                                       ICM_20948_Internal_Gyr),
-      ICM_20948_Sample_Mode_Continuous); // optiona:
+      ICM_20948_Sample_Mode_Continuous); // optional:
                                          // ICM_20948_Sample_Mode_Continuous.
                                          // ICM_20948_Sample_Mode_Cycled
 
@@ -169,7 +170,6 @@ hardware_interface::CallbackReturn ICM20948Interface::on_deactivate(
 hardware_interface::return_type
 ICM20948Interface::read(const rclcpp::Time & /*time*/,
                         const rclcpp::Duration & /*period*/) {
-
   ICM_20948_AGMT_t agmt;
 
   // Read sensor data (assuming some data update function, simple raw read for
@@ -180,17 +180,20 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
     return hardware_interface::return_type::ERROR;
   }
 
-  set_state(sensor_name_ + "/linear_acceleration.x", static_cast<double>(agmt.acc.axes.x));
-  set_state(sensor_name_ + "/linear_acceleration.y", static_cast<double>(agmt.acc.axes.y));
-  set_state(sensor_name_ + "/linear_acceleration.z", static_cast<double>(agmt.acc.axes.z));
-  set_state(sensor_name_ + "/angular_velocity.x", static_cast<double>(agmt.gyr.axes.x));
-  set_state(sensor_name_ + "/angular_velocity.y", static_cast<double>(agmt.gyr.axes.y));
-  set_state(sensor_name_ + "/angular_velocity.z", static_cast<double>(agmt.gyr.axes.z));
+  set_state(sensor_name_ + "/magnetic_field.x", static_cast<double>(agmt.mag.axes.x) * 0.15);
+  set_state(sensor_name_ + "/magnetic_field.y", static_cast<double>(agmt.mag.axes.y) * 0.15);
+  set_state(sensor_name_ + "/magnetic_field.z", static_cast<double>(agmt.mag.axes.z) * 0.15);
+  set_state(sensor_name_ + "/linear_acceleration.x", static_cast<double>(agmt.acc.axes.x) / 16.384);
+  set_state(sensor_name_ + "/linear_acceleration.y", static_cast<double>(agmt.acc.axes.y) / 16.384);
+  set_state(sensor_name_ + "/linear_acceleration.z", static_cast<double>(agmt.acc.axes.z) / 16.384);
+  set_state(sensor_name_ + "/angular_velocity.x", static_cast<double>(agmt.gyr.axes.x) / 131);
+  set_state(sensor_name_ + "/angular_velocity.y", static_cast<double>(agmt.gyr.axes.y) / 131);
+  set_state(sensor_name_ + "/angular_velocity.z", static_cast<double>(agmt.gyr.axes.z) / 131);
 
   return hardware_interface::return_type::OK;
 }
 
-} // namespace catbot_control
+} // namespace icm20948_ros2_control
 
 #include "pluginlib/class_list_macros.hpp"
 
