@@ -22,8 +22,6 @@ public:
   hardware_interface::CallbackReturn on_init(
     const hardware_interface::HardwareComponentInterfaceParams & params) override;
 
-  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
-
   hardware_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
 
@@ -51,6 +49,11 @@ private:
    */
   int i2c_address_ = 0x69;
 
+  /**
+   * @brief The name of the sensor, used for logging and identifying the sensor.
+   */
+  std::string sensor_name_;
+
   // ICM20948 structs
 
   /**
@@ -62,23 +65,6 @@ private:
    * @brief The ICM20948 serial interface struct, used for providing I2C read/write callbacks.
    */
   ICM_20948_Serif_t icm_serif_;
-
-  // HW sensor state fields
-
-  /**
-   * @brief The orientation of the sensor, as a quaternion.
-   */
-  std::array<double, 4> hw_sensor_orientation_;
-
-  /**
-   * @brief The angular velocity of the sensor, as a 3D vector.
-   */
-  std::array<double, 3> hw_sensor_angular_velocity_;
-
-  /**
-   * @brief The linear acceleration of the sensor, as a 3D vector.
-   */
-  std::array<double, 3> hw_sensor_linear_acceleration_;
 
   // static ICM20948 serial interface callbacks
 

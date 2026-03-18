@@ -70,40 +70,20 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  if (info_.sensors.size() != 1) {
+    RCLCPP_ERROR(rclcpp::get_logger("ICM20948Interface"),
+                 "Expected 1 sensor, got %zu", info_.sensors.size());
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  sensor_name_ = info_.sensors[0].name;
+
   // Set up the vtable
   icm_serif_.write = i2c_write_cb;
   icm_serif_.read = i2c_read_cb;
   icm_serif_.user = this;
 
   return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-std::vector<hardware_interface::StateInterface>
-ICM20948Interface::export_state_interfaces() {
-  std::vector<hardware_interface::StateInterface> state_interfaces;
-
-  state_interfaces.emplace_back("imu", "orientation.x",
-                                &hw_sensor_orientation_[0]);
-  state_interfaces.emplace_back("imu", "orientation.y",
-                                &hw_sensor_orientation_[1]);
-  state_interfaces.emplace_back("imu", "orientation.z",
-                                &hw_sensor_orientation_[2]);
-  state_interfaces.emplace_back("imu", "orientation.w",
-                                &hw_sensor_orientation_[3]);
-  state_interfaces.emplace_back("imu", "linear_acceleration.x",
-                                &hw_sensor_linear_acceleration_[0]);
-  state_interfaces.emplace_back("imu", "linear_acceleration.y",
-                                &hw_sensor_linear_acceleration_[1]);
-  state_interfaces.emplace_back("imu", "linear_acceleration.z",
-                                &hw_sensor_linear_acceleration_[2]);
-  state_interfaces.emplace_back("imu", "angular_velocity.x",
-                                &hw_sensor_angular_velocity_[0]);
-  state_interfaces.emplace_back("imu", "angular_velocity.y",
-                                &hw_sensor_angular_velocity_[1]);
-  state_interfaces.emplace_back("imu", "angular_velocity.z",
-                                &hw_sensor_angular_velocity_[2]);
-
-  return state_interfaces;
 }
 
 hardware_interface::CallbackReturn ICM20948Interface::on_activate(
@@ -190,8 +170,6 @@ hardware_interface::return_type
 ICM20948Interface::read(const rclcpp::Time & /*time*/,
                         const rclcpp::Duration & /*period*/) {
 
-  // TODO: Replace w/ DMP readings & add orientation quaternion
-
   ICM_20948_AGMT_t agmt;
 
   // Read sensor data (assuming some data update function, simple raw read for
@@ -202,12 +180,12 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
     return hardware_interface::return_type::ERROR;
   }
 
-  hw_sensor_linear_acceleration_[0] = static_cast<double>(agmt.acc.axes.x);
-  hw_sensor_linear_acceleration_[1] = static_cast<double>(agmt.acc.axes.y);
-  hw_sensor_linear_acceleration_[2] = static_cast<double>(agmt.acc.axes.z);
-  hw_sensor_angular_velocity_[0] = static_cast<double>(agmt.gyr.axes.x);
-  hw_sensor_angular_velocity_[1] = static_cast<double>(agmt.gyr.axes.y);
-  hw_sensor_angular_velocity_[2] = static_cast<double>(agmt.gyr.axes.z);
+  set_state(sensor_name_ + "/linear_acceleration.x", static_cast<double>(agmt.acc.axes.x));
+  set_state(sensor_name_ + "/linear_acceleration.y", static_cast<double>(agmt.acc.axes.y));
+  set_state(sensor_name_ + "/linear_acceleration.z", static_cast<double>(agmt.acc.axes.z));
+  set_state(sensor_name_ + "/angular_velocity.x", static_cast<double>(agmt.gyr.axes.x));
+  set_state(sensor_name_ + "/angular_velocity.y", static_cast<double>(agmt.gyr.axes.y));
+  set_state(sensor_name_ + "/angular_velocity.z", static_cast<double>(agmt.gyr.axes.z));
 
   return hardware_interface::return_type::OK;
 }
