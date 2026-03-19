@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(icm20948_ros2_control)
+project(icm20948_hardware)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -21,7 +21,6 @@ find_package(generate_parameter_library REQUIRED)
 generate_parameter_library(icm20948_interface_parameters
   src/icm20948_interface_parameters.yaml
 )
-
 add_library(${PROJECT_NAME} SHARED
   src/icm20948_interface.cpp
   external/icm20948/ICM_20948_C.c
@@ -46,7 +45,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
                       ${builtin_interfaces_TARGETS})
 
 
-pluginlib_export_plugin_description_file(hardware_interface icm20948_ros2_control_plugins.xml)
+pluginlib_export_plugin_description_file(hardware_interface ${PROJECT_NAME}_plugins.xml)
 
 install(
   DIRECTORY include/
