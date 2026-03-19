@@ -7,9 +7,9 @@
 #include "icm20948/ICM_20948_C.h"
 #include "rclcpp/rclcpp.hpp"
 
-#include "icm20948_ros2_control/icm20948_interface.hpp"
+#include "icm20948_hardware/icm20948_interface.hpp"
 
-namespace icm20948_ros2_control {
+namespace icm20948_hardware {
 
 ICM_20948_Status_e ICM20948Interface::i2c_write_cb(uint8_t regaddr,
                                                    uint8_t *pdata, uint32_t len,
@@ -193,9 +193,9 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
   return hardware_interface::return_type::OK;
 }
 
-} // namespace icm20948_ros2_control
+} // namespace icm20948_hardware
 
 #include "pluginlib/class_list_macros.hpp"
 
-PLUGINLIB_EXPORT_CLASS(icm20948_ros2_control::ICM20948Interface,
+PLUGINLIB_EXPORT_CLASS(icm20948_hardware::ICM20948Interface,
                        hardware_interface::SensorInterface)
