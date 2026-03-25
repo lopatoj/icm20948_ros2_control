@@ -1,11 +1,14 @@
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <fcntl.h>
+#include <hardware_interface/lexical_casts.hpp>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "icm20948/ICM_20948_C.h"
-#include "rclcpp/rclcpp.hpp"
 
 #include "icm20948_hardware/icm20948_interface.hpp"
 
@@ -79,6 +82,55 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
 
   sensor_name_ = info_.sensors[0].name;
 
+  std::vector<bool> reverse_accel = {false, false, false};
+  std::vector<bool> reverse_gyro = {false, false, false};
+
+  if (info_.hardware_parameters.find("use_dlpf") !=
+      info_.hardware_parameters.end()) {
+    use_dlpf_ =
+        hardware_interface::parse_bool(info_.hardware_parameters["use_dlpf"]);
+  }
+
+  if (info_.hardware_parameters.find("i2c_address") !=
+      info_.hardware_parameters.end()) {
+    i2c_address_ = hardware_interface::stoi32(
+        info_.hardware_parameters["i2c_address"]);
+  }
+
+  if (info_.hardware_parameters.find("reverse_accel") !=
+      info_.hardware_parameters.end()) {
+    reverse_accel = hardware_interface::parse_array<bool>(
+        info_.hardware_parameters["reverse_accel"]);
+  }
+
+  if (info_.hardware_parameters.find("reverse_gyro") !=
+      info_.hardware_parameters.end()) {
+    reverse_gyro = hardware_interface::parse_array<bool>(
+        info_.hardware_parameters["reverse_gyro"]);
+  }
+
+  if (info_.hardware_parameters.find("accel_range") !=
+      info_.hardware_parameters.end()) {
+    accel_range_ = hardware_interface::stoui8(
+        info_.hardware_parameters["accel_range"]);
+  }
+
+  if (info_.hardware_parameters.find("gyro_range") !=
+      info_.hardware_parameters.end()) {
+    gyro_range_ = hardware_interface::stoui8(
+        info_.hardware_parameters["gyro_range"]);
+  }
+
+  double accel_scale = (GRAVITY * pow(2.0, accel_range_)) / 16384.0;
+  double gyro_scale = (DEG_TO_RAD * pow(2.0, gyro_range_)) / 131.0;
+
+  accel_scales_[0] = reverse_accel[0] ? -accel_scale : accel_scale;
+  accel_scales_[1] = reverse_accel[1] ? -accel_scale : accel_scale;
+  accel_scales_[2] = reverse_accel[2] ? -accel_scale : accel_scale;
+  gyro_scales_[0] = reverse_gyro[0] ? -gyro_scale : gyro_scale;
+  gyro_scales_[1] = reverse_gyro[1] ? -gyro_scale : gyro_scale;
+  gyro_scales_[2] = reverse_gyro[2] ? -gyro_scale : gyro_scale;
+
   // Set up the vtable
   icm_serif_.write = i2c_write_cb;
   icm_serif_.read = i2c_read_cb;
@@ -129,8 +181,8 @@ hardware_interface::CallbackReturn ICM20948Interface::on_activate(
 
   // Set full scale ranges for both acc and gyr
   ICM_20948_fss_t myfss;
-  myfss.a = gpm2;   // (ICM_20948_ACCEL_CONFIG_FS_SEL_e)
-  myfss.g = dps250; // (ICM_20948_GYRO_CONFIG_1_FS_SEL_e)
+  myfss.a = accel_range_; // (ICM_20948_ACCEL_CONFIG_FS_SEL_e)
+  myfss.g = gyro_range_;  // (ICM_20948_GYRO_CONFIG_1_FS_SEL_e)
   ICM_20948_set_full_scale(
       &icm_device_,
       (ICM_20948_InternalSensorID_bm)(ICM_20948_Internal_Acc |
@@ -148,8 +200,8 @@ hardware_interface::CallbackReturn ICM20948Interface::on_activate(
       myDLPcfg);
 
   // Choose whether or not to use DLPF
-  ICM_20948_enable_dlpf(&icm_device_, ICM_20948_Internal_Acc, false);
-  ICM_20948_enable_dlpf(&icm_device_, ICM_20948_Internal_Gyr, false);
+  ICM_20948_enable_dlpf(&icm_device_, ICM_20948_Internal_Acc, use_dlpf_);
+  ICM_20948_enable_dlpf(&icm_device_, ICM_20948_Internal_Gyr, use_dlpf_);
 
   // Now wake the sensor up
   ICM_20948_sleep(&icm_device_, false);
@@ -180,15 +232,24 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
     return hardware_interface::return_type::ERROR;
   }
 
-  set_state(sensor_name_ + "/magnetic_field.x", static_cast<double>(agmt.mag.axes.x) * 0.15);
-  set_state(sensor_name_ + "/magnetic_field.y", static_cast<double>(agmt.mag.axes.y) * 0.15);
-  set_state(sensor_name_ + "/magnetic_field.z", static_cast<double>(agmt.mag.axes.z) * 0.15);
-  set_state(sensor_name_ + "/linear_acceleration.x", static_cast<double>(agmt.acc.axes.x) / 16.384);
-  set_state(sensor_name_ + "/linear_acceleration.y", static_cast<double>(agmt.acc.axes.y) / 16.384);
-  set_state(sensor_name_ + "/linear_acceleration.z", static_cast<double>(agmt.acc.axes.z) / 16.384);
-  set_state(sensor_name_ + "/angular_velocity.x", static_cast<double>(agmt.gyr.axes.x) / 131);
-  set_state(sensor_name_ + "/angular_velocity.y", static_cast<double>(agmt.gyr.axes.y) / 131);
-  set_state(sensor_name_ + "/angular_velocity.z", static_cast<double>(agmt.gyr.axes.z) / 131);
+  set_state(sensor_name_ + "/magnetic_field.x",
+            static_cast<double>(agmt.mag.axes.x) * 0.15);
+  set_state(sensor_name_ + "/magnetic_field.y",
+            static_cast<double>(agmt.mag.axes.y) * 0.15);
+  set_state(sensor_name_ + "/magnetic_field.z",
+            static_cast<double>(agmt.mag.axes.z) * 0.15);
+  set_state(sensor_name_ + "/linear_acceleration.x",
+            static_cast<double>(agmt.acc.axes.x) * accel_scales_[0]);
+  set_state(sensor_name_ + "/linear_acceleration.y",
+            static_cast<double>(agmt.acc.axes.y) * accel_scales_[1]);
+  set_state(sensor_name_ + "/linear_acceleration.z",
+            static_cast<double>(agmt.acc.axes.z) * accel_scales_[2]);
+  set_state(sensor_name_ + "/angular_velocity.x",
+            static_cast<double>(agmt.gyr.axes.x) * gyro_scales_[0]);
+  set_state(sensor_name_ + "/angular_velocity.y",
+            static_cast<double>(agmt.gyr.axes.y) * gyro_scales_[1]);
+  set_state(sensor_name_ + "/angular_velocity.z",
+            static_cast<double>(agmt.gyr.axes.z) * gyro_scales_[2]);
 
   return hardware_interface::return_type::OK;
 }
