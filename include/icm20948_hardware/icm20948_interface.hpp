@@ -19,7 +19,7 @@ public:
   RCLCPP_SHARED_PTR_DEFINITIONS(ICM20948Interface)
 
   hardware_interface::CallbackReturn on_init(
-    const hardware_interface::HardwareComponentInterfaceParams & params) override;
+    const hardware_interface::HardwareInfo & hardware_info) override;
 
   hardware_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
@@ -29,6 +29,9 @@ public:
 
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+  std::vector<hardware_interface::StateInterface>
+  export_state_interfaces() override;
 
 private:
   /**
@@ -58,6 +61,8 @@ private:
 
   std::array<double, 3> accel_scales_;
   std::array<double, 3> gyro_scales_;
+
+  std::array<double, 9> hw_states_;
 
   // ICM20948 structs
 
