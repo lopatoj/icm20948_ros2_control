@@ -62,7 +62,7 @@ private:
   std::array<double, 3> accel_scales_;
   std::array<double, 3> gyro_scales_;
 
-  std::array<double, 9> hw_states_;
+  std::array<double, 13> hw_states_;
 
   // ICM20948 structs
 

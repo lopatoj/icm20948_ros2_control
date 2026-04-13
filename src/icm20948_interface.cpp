@@ -7,6 +7,7 @@
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
 #include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
 #include <string>
 #include <sys/ioctl.h>
 #include <thread>
@@ -71,6 +72,11 @@ ICM20948Interface::export_state_interfaces() {
   state_interfaces.emplace_back(sensor_name_, "magnetic_field.x", &hw_states_[6]);
   state_interfaces.emplace_back(sensor_name_, "magnetic_field.y", &hw_states_[7]);
   state_interfaces.emplace_back(sensor_name_, "magnetic_field.z", &hw_states_[8]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.x", &hw_states_[9]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.y", &hw_states_[10]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.z", &hw_states_[11]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.w", &hw_states_[12]);
+
   return state_interfaces;
 }
 
@@ -140,6 +146,7 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  i2c_device_ = info_.hardware_parameters["i2c_device"];
   sensor_name_ = info_.sensors[0].name;
 
   std::vector<bool> reverse_accel = {false, false, false};
@@ -195,6 +202,8 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
   icm_serif_.write = i2c_write_cb;
   icm_serif_.read = i2c_read_cb;
   icm_serif_.user = this;
+
+  hw_states_.fill(std::numeric_limits<double>::quiet_NaN());
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -292,15 +301,15 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
     return hardware_interface::return_type::ERROR;
   }
 
-  hw_states_[0] = static_cast<double>(agmt.mag.axes.x) * 0.15;
-  hw_states_[1] = static_cast<double>(agmt.mag.axes.y) * 0.15;
-  hw_states_[2] = static_cast<double>(agmt.mag.axes.z) * 0.15;
-  hw_states_[3] = static_cast<double>(agmt.acc.axes.x) * accel_scales_[0];
-  hw_states_[4] = static_cast<double>(agmt.acc.axes.y) * accel_scales_[1];
-  hw_states_[5] = static_cast<double>(agmt.acc.axes.z) * accel_scales_[2];
-  hw_states_[6] = static_cast<double>(agmt.gyr.axes.x) * gyro_scales_[0];
-  hw_states_[7] = static_cast<double>(agmt.gyr.axes.y) * gyro_scales_[1];
-  hw_states_[8] = static_cast<double>(agmt.gyr.axes.z) * gyro_scales_[2];
+  hw_states_[0] = static_cast<double>(agmt.acc.axes.x) * accel_scales_[0];
+  hw_states_[1] = static_cast<double>(agmt.acc.axes.y) * accel_scales_[1];
+  hw_states_[2] = static_cast<double>(agmt.acc.axes.z) * accel_scales_[2];
+  hw_states_[3] = static_cast<double>(agmt.gyr.axes.x) * gyro_scales_[0];
+  hw_states_[4] = static_cast<double>(agmt.gyr.axes.y) * gyro_scales_[1];
+  hw_states_[5] = static_cast<double>(agmt.gyr.axes.z) * gyro_scales_[2];
+  hw_states_[6] = static_cast<double>(agmt.mag.axes.x) * 0.15;
+  hw_states_[7] = static_cast<double>(agmt.mag.axes.y) * 0.15;
+  hw_states_[8] = static_cast<double>(agmt.mag.axes.z) * 0.15;
 
   return hardware_interface::return_type::OK;
 }
