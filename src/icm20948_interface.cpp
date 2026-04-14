@@ -80,6 +80,7 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  i2c_device_ = info_.hardware_parameters["i2c_device"];
   sensor_name_ = info_.sensors[0].name;
 
   std::vector<bool> reverse_accel = {false, false, false};
