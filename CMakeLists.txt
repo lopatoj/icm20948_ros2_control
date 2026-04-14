@@ -34,7 +34,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
                       rclcpp::rclcpp
                       rclcpp_lifecycle::rclcpp_lifecycle
                       realtime_tools::realtime_tools
-                      urdf::urdf
                       ${sensor_msgs_TARGETS}
                       ${control_msgs_TARGETS}
                       ${builtin_interfaces_TARGETS})
