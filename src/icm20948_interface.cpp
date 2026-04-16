@@ -2,17 +2,83 @@
 #include <cmath>
 #include <cstdint>
 #include <fcntl.h>
+#include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/lexical_casts.hpp>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
+#include <string>
 #include <sys/ioctl.h>
+#include <thread>
 #include <unistd.h>
 
+#include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "icm20948/ICM_20948_C.h"
 
 #include "icm20948_hardware/icm20948_interface.hpp"
 
+namespace {
+
+bool parse_bool(const std::string & s) {
+  std::string lower_s = s;
+  std::transform(lower_s.begin(), lower_s.end(), lower_s.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  if (lower_s == "true" || lower_s == "1") {
+    return true;
+  } else if (lower_s == "false" || lower_s == "0") {
+    return false;
+  }
+  throw std::invalid_argument("Failed to parse boolean from: " + s);
+}
+
+std::vector<bool> parse_bool_array(const std::string & s) {
+  std::vector<bool> result;
+  std::string inner = s;
+
+  // Remove brackets if they exist
+  inner.erase(std::remove(inner.begin(), inner.end(), '['), inner.end());
+  inner.erase(std::remove(inner.begin(), inner.end(), ']'), inner.end());
+
+  std::stringstream ss(inner);
+  std::string item;
+  while (std::getline(ss, item, ',')) {
+    // Trim leading/trailing whitespace
+    item.erase(0, item.find_first_not_of(" \t\n\r"));
+    item.erase(item.find_last_not_of(" \t\n\r") + 1);
+    if (!item.empty()) {
+      result.push_back(parse_bool(item));
+    }
+  }
+  return result;
+}
+
+} // namespace
+
+
 namespace icm20948_hardware {
+
+std::vector<hardware_interface::StateInterface>
+ICM20948Interface::export_state_interfaces() {
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+  state_interfaces.reserve(9);
+
+  state_interfaces.emplace_back(sensor_name_, "linear_acceleration.x", &hw_states_[0]);
+  state_interfaces.emplace_back(sensor_name_, "linear_acceleration.y", &hw_states_[1]);
+  state_interfaces.emplace_back(sensor_name_, "linear_acceleration.z", &hw_states_[2]);
+  state_interfaces.emplace_back(sensor_name_, "angular_velocity.x", &hw_states_[3]);
+  state_interfaces.emplace_back(sensor_name_, "angular_velocity.y", &hw_states_[4]);
+  state_interfaces.emplace_back(sensor_name_, "angular_velocity.z", &hw_states_[5]);
+  state_interfaces.emplace_back(sensor_name_, "magnetic_field.x", &hw_states_[6]);
+  state_interfaces.emplace_back(sensor_name_, "magnetic_field.y", &hw_states_[7]);
+  state_interfaces.emplace_back(sensor_name_, "magnetic_field.z", &hw_states_[8]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.x", &hw_states_[9]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.y", &hw_states_[10]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.z", &hw_states_[11]);
+  state_interfaces.emplace_back(sensor_name_, "orientation.w", &hw_states_[12]);
+
+  return state_interfaces;
+}
 
 ICM_20948_Status_e ICM20948Interface::i2c_write_cb(uint8_t regaddr,
                                                    uint8_t *pdata, uint32_t len,
@@ -68,8 +134,8 @@ ICM_20948_Status_e ICM20948Interface::i2c_read_cb(uint8_t regaddr,
 }
 
 hardware_interface::CallbackReturn ICM20948Interface::on_init(
-    const hardware_interface::HardwareComponentInterfaceParams &params) {
-  if (hardware_interface::SensorInterface::on_init(params) !=
+    const hardware_interface::HardwareInfo &hardware_info) {
+  if (hardware_interface::SensorInterface::on_init(hardware_info) !=
       hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -94,31 +160,31 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
 
   if (info_.hardware_parameters.find("i2c_address") !=
       info_.hardware_parameters.end()) {
-    i2c_address_ = hardware_interface::stoi32(
+    i2c_address_ = std::stoi(
         info_.hardware_parameters["i2c_address"]);
   }
 
   if (info_.hardware_parameters.find("reverse_accel") !=
       info_.hardware_parameters.end()) {
-    reverse_accel = hardware_interface::parse_array<bool>(
+    reverse_accel = parse_bool_array(
         info_.hardware_parameters["reverse_accel"]);
   }
 
   if (info_.hardware_parameters.find("reverse_gyro") !=
       info_.hardware_parameters.end()) {
-    reverse_gyro = hardware_interface::parse_array<bool>(
+    reverse_gyro = parse_bool_array(
         info_.hardware_parameters["reverse_gyro"]);
   }
 
   if (info_.hardware_parameters.find("accel_range") !=
       info_.hardware_parameters.end()) {
-    accel_range_ = hardware_interface::stoui8(
+    accel_range_ = std::stoi(
         info_.hardware_parameters["accel_range"]);
   }
 
   if (info_.hardware_parameters.find("gyro_range") !=
       info_.hardware_parameters.end()) {
-    gyro_range_ = hardware_interface::stoui8(
+    gyro_range_ = std::stoi(
         info_.hardware_parameters["gyro_range"]);
   }
 
@@ -136,6 +202,8 @@ hardware_interface::CallbackReturn ICM20948Interface::on_init(
   icm_serif_.write = i2c_write_cb;
   icm_serif_.read = i2c_read_cb;
   icm_serif_.user = this;
+
+  hw_states_.fill(std::numeric_limits<double>::quiet_NaN());
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -233,24 +301,15 @@ ICM20948Interface::read(const rclcpp::Time & /*time*/,
     return hardware_interface::return_type::ERROR;
   }
 
-  set_state(sensor_name_ + "/magnetic_field.x",
-            static_cast<double>(agmt.mag.axes.x) * 0.15);
-  set_state(sensor_name_ + "/magnetic_field.y",
-            static_cast<double>(agmt.mag.axes.y) * 0.15);
-  set_state(sensor_name_ + "/magnetic_field.z",
-            static_cast<double>(agmt.mag.axes.z) * 0.15);
-  set_state(sensor_name_ + "/linear_acceleration.x",
-            static_cast<double>(agmt.acc.axes.x) * accel_scales_[0]);
-  set_state(sensor_name_ + "/linear_acceleration.y",
-            static_cast<double>(agmt.acc.axes.y) * accel_scales_[1]);
-  set_state(sensor_name_ + "/linear_acceleration.z",
-            static_cast<double>(agmt.acc.axes.z) * accel_scales_[2]);
-  set_state(sensor_name_ + "/angular_velocity.x",
-            static_cast<double>(agmt.gyr.axes.x) * gyro_scales_[0]);
-  set_state(sensor_name_ + "/angular_velocity.y",
-            static_cast<double>(agmt.gyr.axes.y) * gyro_scales_[1]);
-  set_state(sensor_name_ + "/angular_velocity.z",
-            static_cast<double>(agmt.gyr.axes.z) * gyro_scales_[2]);
+  hw_states_[0] = static_cast<double>(agmt.acc.axes.x) * accel_scales_[0];
+  hw_states_[1] = static_cast<double>(agmt.acc.axes.y) * accel_scales_[1];
+  hw_states_[2] = static_cast<double>(agmt.acc.axes.z) * accel_scales_[2];
+  hw_states_[3] = static_cast<double>(agmt.gyr.axes.x) * gyro_scales_[0];
+  hw_states_[4] = static_cast<double>(agmt.gyr.axes.y) * gyro_scales_[1];
+  hw_states_[5] = static_cast<double>(agmt.gyr.axes.z) * gyro_scales_[2];
+  hw_states_[6] = static_cast<double>(agmt.mag.axes.x) * 0.15;
+  hw_states_[7] = static_cast<double>(agmt.mag.axes.y) * 0.15;
+  hw_states_[8] = static_cast<double>(agmt.mag.axes.z) * 0.15;
 
   return hardware_interface::return_type::OK;
 }

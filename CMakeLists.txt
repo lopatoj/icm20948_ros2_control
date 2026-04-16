@@ -16,6 +16,7 @@ find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(realtime_tools REQUIRED)
+find_package(urdf REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/icm20948_interface.cpp
